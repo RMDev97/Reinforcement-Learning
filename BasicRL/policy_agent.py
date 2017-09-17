@@ -53,13 +53,20 @@ class PolicyAgent:
 
         self.update_batch_step = optimisation_method.apply_gradients(zip(self.gradients_ph, self.trainable_variables))
 
+    def _select_action(self, session, state):
+        action_dictionary = session.run(self.output_layer, feed_dict={self.input_layer: [state]})
+        action = np.argmax(np.equal(
+            action_dictionary,
+            np.random.choice(action_dictionary[0], p=action_dictionary[0]))
+                           .astype(int))
+        return action
+
     def train(self, num_episodes, max_episode, update_frequency):
         init = tf.global_variables_initializer()
 
         with tf.Session() as session:
             session.run(init)
             total_reward = []
-            total_length = []
 
             grad_buffer = session.run(tf.trainable_variables())
             for ix, grad in enumerate(grad_buffer):
@@ -71,11 +78,7 @@ class PolicyAgent:
                 episode_history = []
                 for j in range(max_episode):
                     # select an action probabilistically in order to build up experience buffer
-                    action_dictionary = session.run(self.output_layer, feed_dict={self.input_layer: [state]})
-                    action = np.argmax(np.equal(
-                        action_dictionary,
-                        np.random.choice(action_dictionary[0], p=action_dictionary[0]))
-                        .astype(int))
+                    action = self._select_action(session, state)
 
                     new_state, reward, done, _ = self.environment.step(action)
                     episode_history.append([state, action, reward, new_state])
@@ -99,21 +102,38 @@ class PolicyAgent:
                                 grad_buffer[ix] = grad * 0
 
                         total_reward.append(running_reward)
-                        total_length.append(j)
                         break
 
                 if i % 100 == 0:
                     print("Current mean of running total reward at iteration %d is %s" %
                           (i, np.mean(total_reward[-100:])))
 
+    def run(self):
+        init = tf.global_variables_initializer()
+        state = self.environment.reset()
+        total_reward = 0
+        print("Starting in state: %s" % state)
+        with tf.Session() as session:
+            session.run(init)
+            while True:
+                action = self._select_action(session, state)
+                state, reward, done, _ = self.environment.step(action)
+                total_reward += reward
+                print("have entered state %s by taking action %s and receiving reward %s: [total reward: %s]"
+                      % (state, action, reward, total_reward))
+                if done:
+                    print("We have reached the goal state!")
+                    break
+
 
 def main():
     agent = PolicyAgent(state_space_size=4,
-                        hidden_layer_sizes=[8],
+                        hidden_layer_sizes=[10, 10, 8, 8, 6],
                         action_space_size=2,
                         environment=gym.make('CartPole-v0'),
                         optimisation_method=tf.train.AdamOptimizer(0.001))
     agent.train(max_episode=999, num_episodes=5000, update_frequency=5)
+    agent.run()
 
 if __name__ == "__main__":
     main()
