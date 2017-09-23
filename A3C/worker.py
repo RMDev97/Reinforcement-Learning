@@ -37,9 +37,9 @@ class Worker:
         self.episode_mean_values = []
         self.summary_writer = tf.summary.FileWriter("train_%s" % name)
 
-        self.local_ac = model.LocalA3CNetwork(model.A3CNetwork(state_space_size=state_space_size,
-                                              action_space_size=action_space_size, keep_prob=keep_prob,
-                                              state_dims=state_dims, scope=self.name, trainer=trainer))
+        self.local_ac = model.LocalA3CNetwork(model.ACNetwork(state_space_size=state_space_size,
+                                                              action_space_size=action_space_size, keep_prob=keep_prob,
+                                                              state_dims=state_dims, scope=self.name, trainer=trainer))
         self.update_local_ops = model.update_target_graph('global', self.name)
 
     def train(self, rollout, session, gamma, bootstrap_value):
@@ -96,7 +96,7 @@ class Worker:
                                                                                self.local_ac.network.state_in: rnn_state,
                                                                                self.local_ac.network.inputs: [state]
                                                                            })
-                    action = self.select_action(action_predict)
+                    action = Worker.select_action(action_predict)
                     new_state, reward, done, _ = self.environment.step(action)
 
                     episode_buffer.add_experience([state, action, reward, new_state, done, value_predict[0, 0]])
@@ -131,3 +131,7 @@ class Worker:
                     session.run(self.increment)
 
                 episode_count += 1
+
+    @staticmethod
+    def select_action(action_predict):
+        return np.clip(action_predict, 0.0, 1.0)

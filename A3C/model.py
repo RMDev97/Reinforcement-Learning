@@ -24,9 +24,14 @@ def update_target_graph(from_scope, to_scope):
     return op_holder
 
 
-class A3CNetwork:
+class ACNetwork:
+
+    def create_kernel(self, x):
+        return [x for _ in range(len(self.state_dims))]
+
     def __init__(self, state_space_size, action_space_size, trainer, state_dims, keep_prob, scope='global'):
         # build the input and visual encoding layers through use of convolutional neural network layers
+        self.state_dims = state_dims
         self.trainer = trainer
         self.scope = scope
         self.keep_prob = keep_prob
@@ -34,13 +39,16 @@ class A3CNetwork:
         self.state_space_size = state_space_size
 
         self.inputs = tf.placeholder(shape=[None, state_space_size], dtype=tf.float32)
-        self.image_input_layer = tf.reshape(self.inputs, shape=[-1, state_dims[0], state_dims[1], 1])
+        self.image_input_layer = tf.reshape(self.inputs, shape=[-1, state_dims, 1])
         self.output_layer = slim.conv2d(activation_fn=tf.nn.elu, inputs=self.image_input_layer, num_outputs=16,
-                                        kernel_size=[8, 8], stride=[4, 4], padding="VALID")
+                                        kernel_size=self.create_kernel(8), stride=self.create_kernel(4),
+                                        padding="VALID")
         self.output_layer = slim.conv2d(activation_fn=tf.nn.elu, inputs=self.output_layer, num_outputs=32,
-                                        kernel_size=[4, 4], stride=[2, 2], padding="VALID")
+                                        kernel_size=self.create_kernel(4), stride=self.create_kernel(2),
+                                        padding="VALID")
         self.output_layer = slim.conv2d(activation_fn=tf.nn.elu, inputs=self.output_layer, num_outputs=32,
-                                        kernel_size=[4, 4], stride=[2, 2], padding="VALID")
+                                        kernel_size=self.create_kernel(4), stride=self.create_kernel(2),
+                                        padding="VALID")
         self.output_layer = slim.dropout(inputs=self.output_layer, keep_prob=keep_prob)
         self.output_layer = slim.fully_connected(slim.flatten(self.output_layer), 256, activation_fn=tf.nn.elu)
 
@@ -66,12 +74,13 @@ class A3CNetwork:
         self.actor = slim.fully_connected(rnn_output_layer, num_outputs=self.action_space_size,
                                           activation_fn=tf.nn.softmax,
                                           weights_initializer=tf.truncated_normal_initializer(stddev=0.1))
-        self.critic = slim.fully_connected(rnn_output_layer,num_outputs=1,
+
+        self.critic = slim.fully_connected(rnn_output_layer, num_outputs=1,
                                            weights_initializer=tf.truncated_normal_initializer(stddev=0.1))
 
 
 class LocalA3CNetwork:
-    def __init__(self, network: A3CNetwork):
+    def __init__(self, network: ACNetwork):
         self.network = network
         self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
         self.actions_one_hot = tf.one_hot(self.actions, network.action_space_size, dtype=tf.float32)
@@ -81,9 +90,9 @@ class LocalA3CNetwork:
 
         # define the loss functions to be used to train the worker network
         self.value_loss = 0.5 * tf.reduce_sum(tf.square(self.target_v - tf.reshape(network.critic, [-1])))
-        self.entropy = tf.reduce_sum(network.actor*tf.log(network.actor))
-        self.policy_loss = -tf.reduce_sum(tf.log(self.responsible_outputs)*self.advantages)
-        self.loss = 0.5*self.value_loss + self.policy_loss - self.entropy
+        self.entropy = tf.reduce_sum(network.actor * tf.log(network.actor))
+        self.policy_loss = -tf.reduce_sum(tf.log(self.responsible_outputs) * self.advantages)
+        self.loss = 0.5 * self.value_loss + self.policy_loss - self.entropy
 
         # compute gradients of losses to provide to trainer
         local_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, network.scope)
@@ -94,6 +103,3 @@ class LocalA3CNetwork:
         # apply the gradients to the global network
         global_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'global')
         self.apply_grads = network.trainer.apply_gradients(zip(grads, global_vars))
-
-
-
