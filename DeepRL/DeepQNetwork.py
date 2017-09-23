@@ -126,12 +126,13 @@ class DeepQNetwork:
                 accumulated_reward = 0
                 for j in range(config.max_episode_length):
                     # choose an action to take by the e-greedy strategy (randomly if we are in the exploratory phase)
-                    if np.random.rand(1) < e or total_steps < config.pre_train_steps:
-                        action = np.random.randint(0,4)
+                    if total_steps > config.pre_train_steps:
+                        action = self._e_greedy_action(e=e,
+                                                       session=session,
+                                                       state=state)
                     else:
-                        action = session.run(self.main_Q_network.predict,
-                                             feed_dict={self.main_Q_network.flattened_image: [state]})[0]
-
+                        action = self._select_action(state=state, session=session)
+                        
                     # take a step in the environment with the chosen action
                     new_state, reward, done = self.environment.step(action)
                     new_state = np.reshape(new_state, newshape=[self.main_Q_network.flattened_dim])
@@ -181,24 +182,35 @@ class DeepQNetwork:
                     print(total_steps, np.mean(total_reward_per_episode[-10:]), e)
         print("Percent of successful episodes: " + str(sum(total_reward_per_episode) / config.num_episodes) + "%")
 
+    def _select_action(self, session, state):
+        return session.run(self.main_Q_network.predict,
+                           feed_dict={self.main_Q_network.flattened_image: [state]})[0]
+
+    def _e_greedy_action(self, e, session, state):
+        if np.random.rand(1) < e:
+            return np.random.randint(0, 4)
+        else:
+            return session.run(self.main_Q_network.predict,
+                               feed_dict={self.main_Q_network.flattened_image: [state]})[0]
+
 
 def main():
     batch_size = 32  # How many experiences to use for each training step.
     update_freq = 4  # How often to perform a training step.
     y = .99  # Discount factor on the target Q-values
-    startE = 1  # Starting chance of random action
-    endE = 0.1  # Final chance of random action
-    annealing_steps = 10000.  # How many steps of training to reduce startE to endE.
+    start_e = 1  # Starting chance of random action
+    end_e = 0.1  # Final chance of random action
+    annealing_steps = 10000  # How many steps of training to reduce startE to endE.
     num_episodes = 10000  # How many episodes of game environment to train network with.
     pre_train_steps = 10000  # How many steps of random actions before training begins.
-    max_epLength = 50  # The max allowed length of our episode.
+    max_ep_length = 50  # The max allowed length of our episode.
     load_model = False  # Whether to load a saved model.
     path = "./dqn-models"  # The path to save our model to.
     tau = 0.001  # Rate to update target network toward primary network
     environment = gym.make("Breakout-v0")
     config = TrainingConfig(annealing_steps=annealing_steps, batch_size=batch_size, discount_factor=y,
-                            update_frequency=update_freq, startE=startE, endE=endE, num_episodes=num_episodes,
-                            pre_train_steps=pre_train_steps, max_episode_length=max_epLength, load_model=load_model,
+                            update_frequency=update_freq, startE=start_e, endE=end_e, num_episodes=num_episodes,
+                            pre_train_steps=pre_train_steps, max_episode_length=max_ep_length, load_model=load_model,
                             path=path, tau=tau, state_dim=[201, 160, 3])
     dqn = DeepQNetwork(environment=environment, optimisation_method=tf.train.AdamOptimizer(learning_rate=0.01))
     dqn.train(config=config)

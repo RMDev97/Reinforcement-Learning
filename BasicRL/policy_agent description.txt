@@ -1,0 +1,14 @@
+The policy agent implementation defines a reinforcement learning agent which learns a policy to select actions given a state
+based on experience gained through running the agent within the environment
+
+1. defining the model of the policy
+
+the policy is modelled as a feed forward neural network of an arbitrary number of layers which can be specified through
+giving the dimensions of all the layers
+
+2. Derive the loss function
+
+The loss function is computed as the gradient of the log policy multiplied by the advantage of being in the state, which
+in this state is just the reward obtained after arriving in the state.
+
+* the policy itself is computed selecting output neurons from the
