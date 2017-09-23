@@ -69,8 +69,10 @@ class A3CNetwork:
         self.critic = slim.fully_connected(rnn_output_layer,num_outputs=1,
                                            weights_initializer=tf.truncated_normal_initializer(stddev=0.1))
 
+
 class LocalA3CNetwork:
     def __init__(self, network: A3CNetwork):
+        self.network = network
         self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
         self.actions_one_hot = tf.one_hot(self.actions, network.action_space_size, dtype=tf.float32)
         self.target_v = tf.placeholder(shape=[None], dtype=tf.float32)
